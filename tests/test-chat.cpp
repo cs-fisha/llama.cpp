@@ -2646,18 +2646,33 @@ static void test_template_output_peg_parsers(bool detailed_debug) {
             .expect_content(R"({"amount": 123.45, "date": "2025-12-03"})")
             .run();
 
-        // fake tool call marker in reasoning
+        // Tool-call marker text inside a closed think block stays in reasoning (not a call).
+        // Avoid a complete valid call mid-think here: that is intentionally a real call (#29248),
+        // and prefixes ending after such JSON are indistinguishable until more input arrives.
         tst.test(
-               "[THINK]Let me think about [TOOL_CALLS]special_function[ARGS]{\"arg1\":1} and more[/THINK]"
+               "[THINK]Let me think about whether to use [TOOL_CALLS] here[/THINK]"
                R"([TOOL_CALLS]special_function[ARGS]{"arg1": 1})")
             .reasoning_format(COMMON_REASONING_FORMAT_AUTO)
             .enable_thinking(true)
             .tools({ special_function_tool })
-            .expect_reasoning("Let me think about [TOOL_CALLS]special_function[ARGS]{\"arg1\":1} and more")
+            .expect_reasoning("Let me think about whether to use [TOOL_CALLS] here")
             .expect_tool_calls({
                 { "special_function", R"({"arg1": 1})", {} },
             })
             .expect_reconstruction()
+            .run();
+
+        // Real tool call emitted during reasoning (no [/THINK] before [TOOL_CALLS]) — #29248
+        tst.test(
+               "[THINK]I should call the tool now."
+               R"([TOOL_CALLS]special_function[ARGS]{"arg1":1})")
+            .reasoning_format(COMMON_REASONING_FORMAT_AUTO)
+            .enable_thinking(true)
+            .tools({ special_function_tool })
+            .expect_reasoning("I should call the tool now.")
+            .expect_tool_calls({
+                { "special_function", R"({"arg1":1})", {} },
+            })
             .run();
 
         // Continuation tests
